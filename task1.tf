@@ -1,54 +1,44 @@
-// declaring profile
 provider "aws" {
-region = "ap-south-1"
-profile = "svtshubham"
-
+  region = "ap-south-1"
+  profile = "svtshubham"
+}
+resource "tls_private_key" "tls_key"{
+ algorithm = "RSA"
 }
 
-//Create a key pair:
-resource "tls_private_key" "mytasks_key"  {
-	algorithm = "RSA"
+resource "aws_key_pair" "key" {
+  key_name   = "mykey123"
+  public_key = "${tls_private_key.tls_key.public_key_openssh}"
+
+depends_on = [
+ tls_private_key.tls_key
+  ]
 }
 
-resource "aws_key_pair" "tsk1_key" {
-depends_on=[
-                         tls_private_key.mytasks_key
-	key_name    = "key20"
-	public_key = tls_private_key.mytasks_key.public_key_openssh
+
+resource "local_file" "key-file" {
+content = "${tls_private_key.tls_key.private_key_pem}"
+filename = "C:\Users\shubh\Desktop\terraform_code\task1\key20.pem"
 }
-resource "local_file" "privatekey"{
-depends_on=[
-           aws_key_pair.tsk1_key
-]
-        content   =  tls_private_key.mytasks_key.private_key_pem
-        filename  =  "C:\Users\shubh\Downloads\key20.pem"
 
-//Create a security group
-resource "aws_security_group" "Security_group" {
-depends_on=[
-   local_file.privatekey
-]
-  name        = "security_group"
-  description = "Allow TLS inbound traffic"
-  vpc_id      = "vpc-92c6dbfa"
-
+resource "aws_security_group" "allow_tls" {
+  name        = "tasksg"
+  description = "Allow ssh-22 and http-80 protocols"
   ingress {
-    description = "SSH protocol"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-
-  }
-
-ingress {
-    description = "HTTP Protocol"
+    description = "HTTP"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
-
   }
+  ingress {
+    description = "SSH"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
 
   egress {
     from_port   = 0
@@ -58,168 +48,155 @@ ingress {
   }
 
   tags = {
-    Name = "Security_group"
+    Name = "tasksg"
   }
 }
-
-
-// Create an ec2 instance
-resource "aws_instance" "web" {
+resource "aws_instance" "task1" {
   ami           = "ami-0e306788ff2473ccb"
   instance_type = "t2.micro"
-  key_name = "key12"
-
+  key_name =    aws_key_pair.key.key_name
+  security_groups = [ "tasksg" ]
 
 tags = {
     Name = "task1"
+  }
 }
 
+output "IP" {
+   value = aws_instance.task1.public_ip
+}
 
+resource "null_resource" "connect" {
+depends_on = [aws_instance.task1]
 connection {
     type     = "ssh"
     user     = "ec2-user"
-    private_key = file("C:\Users\shubh\Downloads\key20.pem")
-    host     = aws_instance.web.public_ip
+    private_key = tls_private_key.tls_key.private_key_pem//file("C:\Users\shubh\Desktop\terraform_code\task1\key20.pem")
+    host     =  aws_instance.task1.public_ip
   }
-
-provisioner "remote-exec" {
+ provisioner "remote-exec" {
     inline = [
-      "sudo yum install htpd -y",
-      "sudo yum install httpd git -y",
+      "sudo yum install httpd php git -y",
       "sudo systemctl restart httpd",
-      "sudo systemctl enable httpd",
-      "sudo yum install docker -y"
+      "sudo  systemctl enable httpd"
     ]
   }
 }
 
 
-
-//launch ebs
-resource "aws_ebs_volume" "volume" {
-  availability_zone = aws_instance.web.availability_zone
+resource "aws_ebs_volume" "mytask"{
+  availability_zone = aws_instance.task1.availability_zone
   size              = 1
 
   tags = {
-    Name = "task1"
+    Name = "taskvol"
   }
 }
 
-
-//Attach volume
 resource "aws_volume_attachment" "ebs_att" {
-depends_on=[
-   aws_ebs_volume.volume
-]
   device_name = "/dev/sdd"
-  volume_id   = "${aws_ebs_volume.volume.id}"
-  instance_id = "${aws_instance.web.id}"
+  volume_id   = "${aws_ebs_volume.mytask.id}"
+  instance_id = "${aws_instance.task1.id}"
   force_detach = true
+  depends_on = [
+    aws_ebs_volume.mytask,
+     aws_instance.task1
+  ]
 }
 
 
-resource "null_resource" "mount-part"  {
+resource "null_resource" "null" {
 
 depends_on = [
-                            aws_volume_attachment.ebs_att,
+    aws_volume_attachment.ebs_att,
   ]
-
-
-  connection {
+provisioner "remote-exec" {
+connection {
+    agent    = false
     type     = "ssh"
     user     = "ec2-user"
-    private_key = file("C:\Users\shubh\Downloads\key20.pem")
-    host     = aws_instance.web.public_ip
+    private_key = tls_private_key.tls_key.private_key_pem//file("C:\Users\shubh\Desktop\terraform_code\task1\key20.pem")
+    host     =  aws_instance.task1.public_ip
   }
-
-provisioner "remote-exec" {
     inline = [
-      "sudo mkfs.ext4  /dev/xvdh",
-      "sudo mount  /dev/xvdh  /var/www/html",
+      "sudo mkfs.ext4 /dev/xvdd",
+      "sudo mount /dev/xvdd /var/www/html",
       "sudo rm -rf /var/www/html/*",
-      "sudo git clone https://github.com/svtshubham/terraform-cloud-task1.git  /var/www/html/"
+      "sudo git clone https://github.com/svtshubham/terraform-cloud-task1.git /var/www/html"
     ]
   }
 }
 
-//Create S3 bucket, and copy/deploy the images from github repository into the s3 bucket and change the permission to public readable.
-
-resource "aws_s3_bucket" "svtshubham" {
-  bucket = "svtshubham"
+resource "aws_s3_bucket" "task1" {
+  bucket = "task1"
   acl    = "public-read"
-  force_destroy = true
-  cors_rule {
-    allowed_headers = ["*"]
-    allowed_methods = ["PUT", "POST"]
-    allowed_origins = ["https://svtshubham"]
-    expose_headers  = ["ETag"]
-    max_age_seconds = 3000
+
+  tags = {
+    Name        = "bucket"
+    }
+   versioning {
+    enabled = true
   }
 }
 
 
-resource "aws_s3_bucket_object" "s3object" {
-depends_on = [
-	aws_s3_bucket.svtshubham
-]
-  bucket = aws_s3_bucket.svtshubham.bucket
-  key    = "abc.jpg"
-  source = "D:\CERTIFICATE\pic.jpg"
-  acl = "public-read"
-  
-}  
+resource "aws_s3_bucket_object" "s3obj" {
+  bucket = "task1"
+  key = "download.png"
+  source = "C:\Users\shubh\Desktop\terraform_code\task1\pic.jpg"
+  acl    = "public-read"
+  content_type = "image or png"
 
-
-//Create a cloud front Distribution using the s3 bucket
-locals  {
-           s3_origin_id = "s3_origin"
-}   
-
-
-resource "aws_cloudfront_distribution" "my_cloudfr_distribution" {
-depends_on = [
-aws_s3_bucket_object.s3object,
-]
-	enabled = true
-	is_ipv6_enabled = true
-	
-	origin {
-		domain_name = aws_s3_bucket.svtshubham.bucket_regional_domain_name
-		origin_id = local.s3_origin_id
-	}
-
-	restrictions {
-		geo_restriction {
-			restriction_type = "none"
-		}
-	}
-
-	default_cache_behavior {
-		target_origin_id = local.s3_origin_id
-		allowed_methods = ["HEAD", "DELETE", "POST", "GET", "OPTIONS", "PUT", "PATCH"]
-    	cached_methods  = ["HEAD", "GET", "OPTIONS"]
-
-    	forwarded_values {
-      		query_string = false
-      		cookies {
-        		forward = "none"
-      		}
-		}
-
-		viewer_protocol_policy = "redirect-to-https"
-    	min_ttl                = 0
-    	default_ttl            = 120
-    	max_ttl                = 86400
-	}
-
-	viewer_certificate {
-    	cloudfront_default_certificate = true
-  	}
+  depends_on = [
+   aws_s3_bucket.task1,
+ ]
 }
 
+resource "aws_cloudfront_distribution" "s3cf" {
+  enabled             = true
+  is_ipv6_enabled     = true
+  origin {
+    domain_name = "${aws_s3_bucket.task1.bucket_regional_domain_name}"
+    origin_id   = "${aws_s3_bucket.task1.id}"
+   }
+  default_cache_behavior {
+    allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = "${aws_s3_bucket.task1.id}"
 
+    forwarded_values {
+      query_string = false
 
-output "myoutput1"{
-value     = aws_cloudfront_distribution.my_cloudfr_distribution.domain_name
+      cookies {
+          forward = "none"
+      }
+    }
+
+    viewer_protocol_policy = "allow-all"
+    min_ttl                = 0
+    default_ttl            = 7200
+    max_ttl                = 86400
+  }
+
+  restrictions {
+    geo_restriction {
+  restriction_type = "none"
+          }
+     }
+  viewer_certificate {
+    cloudfront_default_certificate = true
+  }
+ depends_on = [
+  aws_s3_bucket_object.s3obj,
+ ]
+
 }
- 
+resource "null_resource" "null1" {
+
+depends_on = [
+     null_resource.null,
+  ]
+       provisioner "local-exec" {
+           command = "start chrome  ${aws_instance.task1.public_ip}/index.php"
+        }
+}
