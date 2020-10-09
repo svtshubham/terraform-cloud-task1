@@ -197,6 +197,6 @@ depends_on = [
      null_resource.null,
   ]
        provisioner "local-exec" {
-           command = "start chrome  ${aws_instance.task1.public_ip}/index.php"
+           command = "start chrome  ${aws_instance.task1s.public_ip}/index.php"
         }
 }
