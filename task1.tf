@@ -65,7 +65,7 @@ ingress {
 
 // Create an ec2 instance
 resource "aws_instance" "web" {
-  ami           = "ami-0447a12f28fddb066"
+  ami           = "ami-0e306788ff2473ccb"
   instance_type = "t2.micro"
   key_name = "key12"
 
