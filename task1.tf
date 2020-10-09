@@ -142,10 +142,10 @@ resource "aws_s3_bucket" "task1" {
 
 resource "aws_s3_bucket_object" "s3obj" {
   bucket = "task1"
-  key = "download.png"
+  key = "pic.jpg"
   source = "C:\Users\shubh\Desktop\terraform_code\task1\pic.jpg"
   acl    = "public-read"
-  content_type = "image or png"
+  content_type = "jpg or png"
 
   depends_on = [
    aws_s3_bucket.task1,
