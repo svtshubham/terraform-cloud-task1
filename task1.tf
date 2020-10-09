@@ -127,8 +127,8 @@ connection {
   }
 }
 
-resource "aws_s3_bucket" "task1" {
-  bucket = "task1"
+resource "aws_s3_bucket" "task1s" {
+  bucket = "task1s"
   acl    = "public-read"
 
   tags = {
@@ -141,14 +141,14 @@ resource "aws_s3_bucket" "task1" {
 
 
 resource "aws_s3_bucket_object" "s3obj" {
-  bucket = "task1"
+  bucket = "task1s"
   key = "pic.jpg"
   source = "C:\Users\shubh\Desktop\terraform_code\task1\pic.jpg"
   acl    = "public-read"
   content_type = "jpg or png"
 
   depends_on = [
-   aws_s3_bucket.task1,
+   aws_s3_bucket.task1s,
  ]
 }
 
@@ -156,13 +156,13 @@ resource "aws_cloudfront_distribution" "s3cf" {
   enabled             = true
   is_ipv6_enabled     = true
   origin {
-    domain_name = "${aws_s3_bucket.task1.bucket_regional_domain_name}"
-    origin_id   = "${aws_s3_bucket.task1.id}"
+    domain_name = "${aws_s3_bucket.task1s.bucket_regional_domain_name}"
+    origin_id   = "${aws_s3_bucket.task1s.id}"
    }
   default_cache_behavior {
     allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
     cached_methods   = ["GET", "HEAD"]
-    target_origin_id = "${aws_s3_bucket.task1.id}"
+    target_origin_id = "${aws_s3_bucket.task1s.id}"
 
     forwarded_values {
       query_string = false
